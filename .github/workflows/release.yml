@@ -37,6 +37,8 @@ jobs:
             goarch: riscv64
       fail-fast: false
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       BUILD_TAG: ${{ matrix.build-tag }}
       GOOS: ${{ matrix.goos }}
