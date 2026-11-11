@@ -7,7 +7,7 @@ cur_dir=$(pwd)
 
 # check os
 if [[ -f /etc/redhat-release ]]; then
-    release="centos"
+    release="rhel"
 elif cat /etc/issue | grep -Eqi "debian"; then
     release="debian"
 elif cat /etc/issue | grep -Eqi "ubuntu"; then
@@ -24,7 +24,7 @@ else
     echo -e "未检测到系统版本！\n" && exit 1
 fi
 
-arch=$(arch)
+arch=$(uname -m 2>/dev/null || arch 2>/dev/null)
 
 if [[ $arch == "x86_64" || $arch == "x64" || $arch == "amd64" ]]; then
     arch="amd64"
@@ -42,13 +42,44 @@ if [ "$(getconf WORD_BIT)" != '32' ] && [ "$(getconf LONG_BIT)" != '64' ] ; then
     exit 2
 fi
 
-if [[ $arch == "amd64" ]]; then
-    if lscpu | grep -Eqi "avx2"; then
-        release="amd64v3"
+check_v3_support() {
+    # 1. 优先使用 glibc 自带的硬件支持检测 (glibc >= 2.33 均支持)
+    if /lib64/ld-linux-x86-64.so.2 --help 2>/dev/null | grep -qi "x86-64-v3 (supported)"; then
+        return 0
     fi
-fi
 
-echo "架构: ${arch}"
+    # 2. 检查 /proc/cpuinfo 中的关键指令集 (AVX2, BMI1, BMI2, FMA)
+    if [[ -f /proc/cpuinfo ]]; then
+        if grep -Eqi "avx2" /proc/cpuinfo && \
+           grep -Eqi "bmi1" /proc/cpuinfo && \
+           grep -Eqi "bmi2" /proc/cpuinfo && \
+           grep -Eqi "fma"  /proc/cpuinfo; then
+            return 0
+        fi
+    fi
+
+    # 3. 兜底检查：通过 lscpu
+    if command -v lscpu >/dev/null 2>&1; then
+        local flags
+        flags=$(lscpu 2>/dev/null | grep -i "flags")
+        if echo "$flags" | grep -Eqi "avx2" && echo "$flags" | grep -Eqi "bmi2"; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+if [[ $arch == "amd64" ]]; then
+    if check_v3_support; then
+        arch="amd64v3"
+        echo -e "检测到 CPU 支持 x86-64-v3 指令集 (AVX2/BMI2)，选用高性能版本: ${arch}"
+    else
+        echo -e "CPU 未检测到完整的 x86-64-v3 指令集，选用标准兼容版本: ${arch}"
+    fi
+else
+    echo -e "架构: ${arch}"
+fi
 
 os_version=""
 
@@ -117,11 +148,20 @@ install_next_server() {
           echo -e "检测 next-server 版本失败，可能是超出 Github API 限制，请稍后再试，或手动指定 next-server 版本安装"
           exit 1
       fi
-      echo -e "检测到 next-server 最新版本：${last_version}，开始安装"
-      wget -q -O /usr/local/next-server/next-server-linux.zip https://github.com/IngressPrime/NeXT-Server/releases/download/${last_version}/next-server-linux-${arch}.zip
+      echo -e "检测到 next-server 最新版本：${last_version}，开始安装 (${arch})"
+      url="https://github.com/IngressPrime/NeXT-Server/releases/download/${last_version}/next-server-linux-${arch}.zip"
+      wget -q -O /usr/local/next-server/next-server-linux.zip ${url}
       if [[ $? -ne 0 ]]; then
-          echo -e "下载 next-server 失败，请确保你的服务器能够下载 Github 的文件"
-          exit 1
+          if [[ $arch == "amd64v3" ]]; then
+              echo -e "下载 amd64v3 架构包失败，尝试降级下载通用 amd64 版本..."
+              arch="amd64"
+              url="https://github.com/IngressPrime/NeXT-Server/releases/download/${last_version}/next-server-linux-${arch}.zip"
+              wget -q -O /usr/local/next-server/next-server-linux.zip ${url}
+          fi
+          if [[ $? -ne 0 ]]; then
+              echo -e "下载 next-server 失败，请确保你的服务器能够下载 Github 的文件"
+              exit 1
+          fi
       fi
   else
       if [[ $1 == v* ]]; then
@@ -130,11 +170,19 @@ install_next_server() {
 	        last_version="v"$1
 	    fi
       url="https://github.com/IngressPrime/NeXT-Server/releases/download/${last_version}/next-server-linux-${arch}.zip"
-      echo -e "开始安装 next-server ${last_version}"
+      echo -e "开始安装 next-server ${last_version} (${arch})"
       wget -q -O /usr/local/next-server/next-server-linux.zip ${url}
       if [[ $? -ne 0 ]]; then
-          echo -e "下载 next-server ${last_version} 失败，请确保此版本存在"
-          exit 1
+          if [[ $arch == "amd64v3" ]]; then
+              echo -e "下载 amd64v3 架构包失败，尝试降级下载通用 amd64 版本..."
+              arch="amd64"
+              url="https://github.com/IngressPrime/NeXT-Server/releases/download/${last_version}/next-server-linux-${arch}.zip"
+              wget -q -O /usr/local/next-server/next-server-linux.zip ${url}
+          fi
+          if [[ $? -ne 0 ]]; then
+              echo -e "下载 next-server ${last_version} 失败，请确保此版本存在"
+              exit 1
+          fi
       fi
   fi
 
