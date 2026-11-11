@@ -191,7 +191,7 @@ install_next_server() {
   chmod +x next-server
   mkdir /etc/next-server/ -p
   rm /etc/systemd/system/next-server.service -f
-  file="https://github.com/IngressPrime/NeXT-Server/raw/main/release/next-server.service"
+  file="https://raw.githubusercontent.com/IngressPrime/NeXT-Server/main/release/next-server.service"
   wget -q -O /etc/systemd/system/next-server.service ${file}
   systemctl daemon-reload
   systemctl stop next-server
@@ -230,7 +230,10 @@ install_next_server() {
       cp rulelist /etc/next-server/
   fi
 
-  curl -o /usr/bin/next-server -Ls https://github.com/IngressPrime/NeXT-Server/raw/main/release/next-server.sh
+  curl -sSfL -o /usr/bin/next-server https://raw.githubusercontent.com/IngressPrime/NeXT-Server/main/release/next-server.sh
+  if [[ $? -ne 0 || ! -s /usr/bin/next-server ]]; then
+      ln -sf /usr/local/next-server/next-server /usr/bin/next-server
+  fi
   chmod +x /usr/bin/next-server
   cd $cur_dir
   rm -f install.sh
