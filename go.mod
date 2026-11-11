@@ -1,6 +1,6 @@
 module github.com/The-NeXT-Project/NeXT-Server
 
-go 1.27.4
+go 1.27
 
 require (
 	dario.cat/mergo v1.0.2
