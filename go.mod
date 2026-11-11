@@ -263,3 +263,9 @@ require (
 )
 
 replace github.com/exoscale/egoscale => github.com/exoscale/egoscale v0.102.0
+
+replace (
+	github.com/quic-go/qpack => github.com/quic-go/qpack v0.5.1
+	github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.50.1
+	gvisor.dev/gvisor => gvisor.dev/gvisor v0.0.0-20231202080848-1f7806d17489
+)
